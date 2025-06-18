@@ -1,155 +1,159 @@
-"use client"
+'use client';
 
-import { useEffect, useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Product } from '@/types/product';
+
+interface Order {
+  id: number;
+  total: number;
+  status: string;
+  created_at: string;
+}
 
 interface DashboardStats {
-  totalRevenue: number
-  totalOrders: number
-  activeUsers: number
-  activeLiveStreams: number
-  revenueGrowth: number
-  ordersGrowth: number
-  usersGrowth: number
-  liveStreamsGrowth: number
+  totalProducts: number;
+  totalOrders: number;
+  totalRevenue: number;
+  recentOrders: Order[];
 }
-import { Overview } from "@/components/dashboard/overview"
-import { RecentSales } from "@/components/dashboard/recent-sales"
-import { 
-  ShoppingBag, 
-  Users, 
-  CreditCard, 
-  Activity 
-} from "lucide-react"
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
-    totalRevenue: 0,
+    totalProducts: 0,
     totalOrders: 0,
-    activeUsers: 0,
-    activeLiveStreams: 0,
-    revenueGrowth: 0,
-    ordersGrowth: 0,
-    usersGrowth: 0,
-    liveStreamsGrowth: 0
-  })
-  const [loading, setLoading] = useState(true)
+    totalRevenue: 0,
+    recentOrders: [],
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    const fetchDashboardStats = async () => {
-      try {
-        const token = localStorage.getItem("token")
-        const response = await fetch("http://localhost:8000/api/admin/dashboard/stats", {
+    fetchDashboardStats();
+  }, []);
+
+  const fetchDashboardStats = async () => {
+    try {
+      const [productsRes, ordersRes] = await Promise.all([
+        fetch('http://localhost:8000/api/products', {
           headers: {
-            Authorization: `Bearer ${token}`
-          }
-        })
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          },
+        }),
+        fetch('http://localhost:8000/api/orders', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          },
+        }),
+      ]);
 
-        if (!response.ok) {
-          throw new Error("Failed to fetch dashboard stats")
-        }
-
-        const data = await response.json()
-        setStats(data)
-      } catch (error) {
-        console.error("Error fetching dashboard stats:", error)
-      } finally {
-        setLoading(false)
+      if (!productsRes.ok || !ordersRes.ok) {
+        throw new Error('Failed to fetch dashboard data');
       }
-    }
 
-    fetchDashboardStats()
-  }, [])
+      const productsData = await productsRes.json();
+      const ordersData = await ordersRes.json();
+
+      const totalRevenue = ordersData.data.reduce((acc: number, order: Order) => 
+        acc + order.total, 0);
+
+      setStats({
+        totalProducts: productsData.data.length,
+        totalOrders: ordersData.data.length,
+        totalRevenue,
+        recentOrders: ordersData.data.slice(0, 5), // Get last 5 orders
+      });
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (loading) {
-    return (
-      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
-        <div className="text-lg">Loading...</div>
-      </div>
-    )
+    return <div className="p-4">Loading...</div>;
+  }
+
+  if (error) {
+    return <div className="p-4 text-red-500">{error}</div>;
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-3xl font-bold">Dashboard</h1>
-      
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="p-4 space-y-4">
+      {/* Stats Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Pendapatan</CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Total Products</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              Rp{stats.totalRevenue.toLocaleString("id-ID")}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {stats.revenueGrowth > 0 ? "+" : ""}{stats.revenueGrowth}% dari bulan lalu
-            </p>
+            <div className="text-2xl font-bold">{stats.totalProducts}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pesanan</CardTitle>
-            <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {stats.totalOrders.toLocaleString("id-ID")}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {stats.ordersGrowth > 0 ? "+" : ""}{stats.ordersGrowth}% dari bulan lalu
-            </p>
+            <div className="text-2xl font-bold">{stats.totalOrders}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pengguna Aktif</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {stats.activeUsers.toLocaleString("id-ID")}
+              Rp {stats.totalRevenue.toLocaleString()}
             </div>
-            <p className="text-xs text-muted-foreground">
-              {stats.usersGrowth > 0 ? "+" : ""}{stats.usersGrowth}% dari bulan lalu
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Live Stream Aktif</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {stats.activeLiveStreams}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {stats.liveStreamsGrowth > 0 ? "+" : ""}{stats.liveStreamsGrowth}% dari kemarin
-            </p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4">
-          <CardHeader>
-            <CardTitle>Ikhtisar</CardTitle>
-          </CardHeader>
-          <CardContent className="pl-2">
-            <Overview />
-          </CardContent>
-        </Card>
-        <Card className="col-span-3">
-          <CardHeader>
-            <CardTitle>Penjualan Terbaru</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <RecentSales />
-          </CardContent>
-        </Card>
-      </div>
+      {/* Recent Orders */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Orders</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="py-3 px-4 text-left">Order ID</th>
+                  <th className="py-3 px-4 text-left">Total</th>
+                  <th className="py-3 px-4 text-left">Status</th>
+                  <th className="py-3 px-4 text-left">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.recentOrders.map((order) => (
+                  <tr key={order.id} className="border-b">
+                    <td className="py-3 px-4">#{order.id}</td>
+                    <td className="py-3 px-4">
+                      Rp {order.total.toLocaleString()}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-1 rounded-full text-xs ${
+                        order.status === 'completed' 
+                          ? 'bg-green-100 text-green-800'
+                          : order.status === 'pending'
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {order.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      {new Date(order.created_at).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
-  )
+  );
 }

@@ -1,151 +1,231 @@
-"use client"
+'use client';
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Search, Eye } from "lucide-react"
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-// Data dummy untuk contoh
-const orders = [
-  {
-    id: "ORD001",
-    customer: "Budi Santoso",
-    date: "2024-03-20",
-    total: 450000,
-    status: "Menunggu Pembayaran",
-    items: 3
-  },
-  {
-    id: "ORD002",
-    customer: "Dewi Lestari",
-    date: "2024-03-20",
-    total: 750000,
-    status: "Dikemas",
-    items: 5
-  },
-  {
-    id: "ORD003",
-    customer: "Rini Wijaya",
-    date: "2024-03-19",
-    total: 250000,
-    status: "Dikirim",
-    items: 2
-  },
-  {
-    id: "ORD004",
-    customer: "Agus Setiawan",
-    date: "2024-03-19",
-    total: 1250000,
-    status: "Selesai",
-    items: 8
-  },
-]
-
-const statusColors = {
-  "Menunggu Pembayaran": "bg-yellow-100 text-yellow-700",
-  "Dikemas": "bg-blue-100 text-blue-700",
-  "Dikirim": "bg-purple-100 text-purple-700",
-  "Selesai": "bg-green-100 text-green-700",
-  "Dibatalkan": "bg-red-100 text-red-700"
+interface OrderItem {
+  id: number;
+  product_name: string;
+  quantity: number;
+  price: number;
+  subtotal: number;
 }
 
-export default function OrderPage() {
-  const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState("")
+interface Order {
+  id: number;
+  user_name: string;
+  total: number;
+  status: string;
+  items: OrderItem[];
+  created_at: string;
+  shipping_address: string;
+  payment_method: string;
+}
 
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.id.toLowerCase().includes(search.toLowerCase()) ||
-      order.customer.toLowerCase().includes(search.toLowerCase())
-    const matchesStatus = !statusFilter || order.status === statusFilter
-    return matchesSearch && matchesStatus
-  })
+export default function OrdersPage() {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+
+  useEffect(() => {
+    fetchOrders();
+  }, []);
+
+  const fetchOrders = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/orders', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch orders');
+      }
+
+      const data = await response.json();
+      setOrders(data.data);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateOrderStatus = async (orderId: number, status: string) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/orders/${orderId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update order status');
+      }
+
+      // Refresh orders list
+      fetchOrders();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'processing':
+        return 'bg-blue-100 text-blue-800';
+      case 'completed':
+        return 'bg-green-100 text-green-800';
+      case 'cancelled':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  if (loading) {
+    return <div className="p-4">Loading...</div>;
+  }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Pesanan</h1>
-      </div>
+    <div className="p-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Orders</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {error && (
+            <div className="mb-4 p-3 text-sm text-red-500 bg-red-50 rounded-md">
+              {error}
+            </div>
+          )}
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Cari pesanan..."
-            className="pl-8"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">Semua Status</SelectItem>
-            <SelectItem value="Menunggu Pembayaran">Menunggu Pembayaran</SelectItem>
-            <SelectItem value="Dikemas">Dikemas</SelectItem>
-            <SelectItem value="Dikirim">Dikirim</SelectItem>
-            <SelectItem value="Selesai">Selesai</SelectItem>
-            <SelectItem value="Dibatalkan">Dibatalkan</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="py-3 px-4 text-left">Order ID</th>
+                  <th className="py-3 px-4 text-left">Customer</th>
+                  <th className="py-3 px-4 text-left">Total</th>
+                  <th className="py-3 px-4 text-left">Status</th>
+                  <th className="py-3 px-4 text-left">Date</th>
+                  <th className="py-3 px-4 text-left">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map((order) => (
+                  <tr key={order.id} className="border-b">
+                    <td className="py-3 px-4">#{order.id}</td>
+                    <td className="py-3 px-4">{order.user_name}</td>
+                    <td className="py-3 px-4">
+                      Rp {order.total.toLocaleString()}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(order.status)}`}>
+                        {order.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      {new Date(order.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedOrder(order)}
+                        >
+                          View Details
+                        </Button>
+                        <select
+                          className="px-2 py-1 text-sm border rounded"
+                          value={order.status}
+                          onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="processing">Processing</option>
+                          <option value="completed">Completed</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>ID Pesanan</TableHead>
-              <TableHead>Pelanggan</TableHead>
-              <TableHead>Tanggal</TableHead>
-              <TableHead>Total Item</TableHead>
-              <TableHead>Total Harga</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Aksi</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredOrders.map((order) => (
-              <TableRow key={order.id}>
-                <TableCell className="font-medium">{order.id}</TableCell>
-                <TableCell>{order.customer}</TableCell>
-                <TableCell>{order.date}</TableCell>
-                <TableCell>{order.items} item</TableCell>
-                <TableCell>Rp{order.total.toLocaleString()}</TableCell>
-                <TableCell>
-                  <span
-                    className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
-                      statusColors[order.status as keyof typeof statusColors]
-                    }`}
-                  >
-                    {order.status}
-                  </span>
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="icon">
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+          {/* Order Details Modal */}
+          {selectedOrder && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+              <Card className="w-full max-w-2xl">
+                <CardHeader>
+                  <CardTitle>Order #{selectedOrder.id} Details</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="font-medium">Customer Information</h3>
+                      <p>Name: {selectedOrder.user_name}</p>
+                      <p>Shipping Address: {selectedOrder.shipping_address}</p>
+                      <p>Payment Method: {selectedOrder.payment_method}</p>
+                    </div>
+
+                    <div>
+                      <h3 className="font-medium mb-2">Order Items</h3>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="py-2 text-left">Product</th>
+                            <th className="py-2 text-left">Quantity</th>
+                            <th className="py-2 text-left">Price</th>
+                            <th className="py-2 text-left">Subtotal</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedOrder.items.map((item) => (
+                            <tr key={item.id} className="border-b">
+                              <td className="py-2">{item.product_name}</td>
+                              <td className="py-2">{item.quantity}</td>
+                              <td className="py-2">Rp {item.price.toLocaleString()}</td>
+                              <td className="py-2">Rp {item.subtotal.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr>
+                            <td colSpan={3} className="py-2 text-right font-medium">Total:</td>
+                            <td className="py-2 font-medium">
+                              Rp {selectedOrder.total.toLocaleString()}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <Button
+                        variant="outline"
+                        onClick={() => setSelectedOrder(null)}
+                      >
+                        Close
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
-  )
+  );
 }
