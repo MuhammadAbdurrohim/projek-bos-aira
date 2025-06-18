@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/nav_home">
+
+    <fragment
+        android:id="@+id/nav_home"
+        android:name="com.airastore.app.fragments.HomeFragment"
+        android:label="@string/home">
+        <action
+            android:id="@+id/action_home_to_product_detail"
+            app:destination="@id/productDetailFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/nav_category"
+        android:name="com.airastore.app.fragments.CategoryFragment"
+        android:label="@string/category">
+        <action
+            android:id="@+id/action_category_to_product_detail"
+            app:destination="@id/productDetailFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/nav_live"
+        android:name="com.airastore.app.fragments.LiveFragment"
+        android:label="@string/live">
+        <action
+            android:id="@+id/action_live_to_live_stream"
+            app:destination="@id/liveStreamFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/nav_cart"
+        android:name="com.airastore.app.fragments.CartFragment"
+        android:label="@string/cart">
+        <action
+            android:id="@+id/action_cart_to_checkout"
+            app:destination="@id/checkoutFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/nav_profile"
+        android:name="com.airastore.app.fragments.ProfileFragment"
+        android:label="@string/profile" />
+
+    <!-- Additional destinations -->
+    <fragment
+        android:id="@+id/productDetailFragment"
+        android:name="com.airastore.app.fragments.ProductDetailFragment"
+        android:label="Product Detail">
+        <argument
+            android:name="productId"
+            app:argType="string" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/liveStreamFragment"
+        android:name="com.airastore.app.fragments.LiveStreamFragment"
+        android:label="Live Stream">
+        <argument
+            android:name="streamId"
+            app:argType="string" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/checkoutFragment"
+        android:name="com.airastore.app.fragments.CheckoutFragment"
+        android:label="Checkout" />
+
+</navigation>

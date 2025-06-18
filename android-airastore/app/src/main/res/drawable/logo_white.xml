@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="180dp"
+    android:height="180dp"
+    android:viewportWidth="180"
+    android:viewportHeight="180">
+
+    <!-- Simple store icon as placeholder - Replace with actual Aira Grosir logo -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M90,20C55.82,20 28,47.82 28,82C28,116.18 55.82,144 90,144C124.18,144 152,116.18 152,82C152,47.82 124.18,20 90,20ZM90,134C61.34,134 38,110.66 38,82C38,53.34 61.34,30 90,30C118.66,30 142,53.34 142,82C142,110.66 118.66,134 90,134ZM90,40C67.36,40 48,59.36 48,82C48,104.64 67.36,124 90,124C112.64,124 132,104.64 132,82C132,59.36 112.64,40 90,40Z"/>
+</vector>
