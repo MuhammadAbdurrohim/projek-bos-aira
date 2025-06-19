@@ -9,6 +9,10 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.airastore.app.R
 import com.airastore.app.adapters.ProductAdapter
+import com.airastore.app.adapters.LiveStreamAdapter
+import android.content.Intent
+import com.airastore.app.views.LiveStreamActivity
+import com.airastore.app.models.LiveStream
 import com.airastore.app.databinding.FragmentHomeBinding
 import com.airastore.app.models.Product
 import com.airastore.app.utils.gone
@@ -59,6 +63,17 @@ class HomeFragment : Fragment() {
                 addToCart(product)
             }
         )
+
+        // Add live stream item click listener
+        viewModel.liveStreams.observe(viewLifecycleOwner) { streams ->
+            // Assuming you have a live stream adapter or UI element
+            // For example, if you have a RecyclerView for live streams:
+            // liveStreamAdapter.submitList(streams)
+            // liveStreamAdapter.setOnItemClickListener { liveStream ->
+            //     navigateToLiveStream(liveStream.id)
+            // }
+            // For demo, just log or handle accordingly
+        }
 
         binding.recyclerView.apply {
             layoutManager = LinearLayoutManager(requireContext())
@@ -143,7 +158,10 @@ class HomeFragment : Fragment() {
 
         // Observe live streams
         viewModel.liveStreams.observe(viewLifecycleOwner) { streams ->
-            // Update live stream preview
+            liveStreamAdapter = LiveStreamAdapter(streams) { liveStream ->
+                navigateToLiveStream(liveStream.id)
+            }
+            // TODO: Update UI to show live streams, e.g. in a RecyclerView
         }
     }
 
@@ -186,6 +204,7 @@ class HomeFragment : Fragment() {
 
     private fun setupLiveStreamPreview() {
         // Setup live stream preview widget
+        // TODO: Implement RecyclerView for live streams using liveStreamAdapter
     }
 
     private fun showEmptyState() {
@@ -200,6 +219,12 @@ class HomeFragment : Fragment() {
 
     private fun navigateToProductDetail(product: Product) {
         // Navigate to product detail
+    }
+
+    private fun navigateToLiveStream(liveStreamId: Int) {
+        val intent = Intent(requireContext(), LiveStreamActivity::class.java)
+        intent.putExtra("STREAM_ID", liveStreamId.toString())
+        startActivity(intent)
     }
 
     private fun addToCart(product: Product) {

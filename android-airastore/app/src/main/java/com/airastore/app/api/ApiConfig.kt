@@ -13,6 +13,10 @@ object ApiConfig {
     private const val BASE_URL = "http://10.0.2.2:8000/api/" // URL for Android Emulator to access localhost
     private const val TIMEOUT = 60L // Timeout dalam detik
 
+    // ZegoCloud configuration
+    const val ZEGO_APP_ID = 1662428519L
+    const val ZEGO_SERVER_SECRET = "368956dc72e941792dfbb6e8474a3ddf"
+
     fun getApiService(sessionManager: SessionManager): ApiService {
         val retrofit = Retrofit.Builder()
             .baseUrl(BASE_URL)

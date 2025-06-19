@@ -99,6 +99,10 @@ dependencies {
     // QR Code
     implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
 
+    // ZegoCloud SDK
+    implementation 'im.zego:zego-uikit-prebuilt:2.16.0'
+    implementation 'im.zego:zego-express-engine:2.16.0'
+
     // Testing
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
