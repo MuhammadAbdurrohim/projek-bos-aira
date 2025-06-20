@@ -56,8 +56,10 @@ class HomeFragment : Fragment() {
 
         // Setup RecyclerView
         productAdapter = ProductAdapter(
-            onProductClick = { product ->
-                navigateToProductDetail(product)
+            onItemClick = { product ->
+                // Show product modal dialog
+                val modal = ModalProductFragment.newInstance(product)
+                modal.show(childFragmentManager, ModalProductFragment.TAG)
             },
             onAddToCartClick = { product ->
                 addToCart(product)

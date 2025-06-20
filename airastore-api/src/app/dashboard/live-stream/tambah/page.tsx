@@ -1,201 +1,368 @@
-'use client';
-
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from 'next/router';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { format } from 'date-fns';
+import { LoadingOverlay } from '@/components/ui/loading';
+import ErrorMessage from '@/components/ui/error';
+import { useToast, ToastHook } from '@/lib/hooks';
+
+interface FormData {
+  title: string;
+  description: string;
+  scheduled_at: string;
+  thumbnail?: File;
+  products: string[];
+}
+
+interface FormErrors {
+  title?: string;
+  description?: string;
+  scheduled_at?: string;
+  thumbnail?: string;
+  products?: string;
+  _error?: string;
+}
 
 export default function AddLiveStreamPage() {
   const router = useRouter();
+  const toast: ToastHook = useToast();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     title: '',
     description: '',
     scheduled_at: '',
-    thumbnail: null as File | null,
-    products: [] as { id: number; order: number; is_highlighted: boolean }[],
-    settings: {
-      chat_enabled: true,
-      reactions_enabled: true,
-      product_showcase_enabled: true
-    }
+    products: [],
   });
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
+  const [selectedProducts, setSelectedProducts] = useState<Array<{id: string, name: string}>>([]);
+  const [showProductSelector, setShowProductSelector] = useState(false);
+
+  const validateForm = (): boolean => {
+    const errors: FormErrors = {};
+
+    if (!formData.title.trim()) {
+      errors.title = 'Title is required';
+    }
+
+    if (!formData.description.trim()) {
+      errors.description = 'Description is required';
+    }
+
+    if (!formData.scheduled_at) {
+      errors.scheduled_at = 'Schedule date is required';
+    } else {
+      const scheduledDate = new Date(formData.scheduled_at);
+      const now = new Date();
+      if (scheduledDate <= now) {
+        errors.scheduled_at = 'Schedule date must be in the future';
+      }
+    }
+
+    if (formData.products.length === 0) {
+      errors.products = 'At least one product must be selected';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!validateForm()) {
+      return;
+    }
+
     setLoading(true);
-    setError('');
 
     try {
       const formDataToSend = new FormData();
-      formDataToSend.append('title', formData.title);
-      formDataToSend.append('description', formData.description);
-      formDataToSend.append('scheduled_at', formData.scheduled_at);
-      if (formData.thumbnail) {
-        formDataToSend.append('thumbnail', formData.thumbnail);
-      }
-      formDataToSend.append('products', JSON.stringify(formData.products));
-      formDataToSend.append('settings', JSON.stringify(formData.settings));
+      Object.entries(formData).forEach(([key, value]) => {
+        if (key === 'products') {
+          formDataToSend.append(key, JSON.stringify(value));
+        } else if (key === 'thumbnail' && value instanceof File) {
+          formDataToSend.append(key, value);
+        } else {
+          formDataToSend.append(key, String(value));
+        }
+      });
 
-      const response = await fetch('http://localhost:8000/api/live-streams', {
+      const response = await fetch('/api/live-streams', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
         body: formDataToSend,
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error('Failed to create live stream');
+        throw new Error(data.message || 'Failed to create live stream');
       }
 
+      toast.addToast('Live stream created successfully', 'success');
       router.push('/dashboard/live-stream');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      setFormErrors({ _error: errorMessage });
+      toast.addToast(errorMessage, 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
+  const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type and size
+      const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
+      const maxSize = 2 * 1024 * 1024; // 2MB
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
+      if (!validTypes.includes(file.type)) {
+        setFormErrors(prev => ({
+          ...prev,
+          thumbnail: 'Please upload a valid image file (JPEG, PNG, or GIF)',
+        }));
+        return;
+      }
+
+      if (file.size > maxSize) {
+        setFormErrors(prev => ({
+          ...prev,
+          thumbnail: 'Image size should be less than 2MB',
+        }));
+        return;
+      }
+
       setFormData(prev => ({
         ...prev,
-        thumbnail: e.target.files![0]
+        thumbnail: file,
+      }));
+      setFormErrors(prev => ({
+        ...prev,
+        thumbnail: undefined,
       }));
     }
   };
 
-  const handleSettingChange = (setting: keyof typeof formData.settings) => {
-    setFormData(prev => ({
-      ...prev,
-      settings: {
-        ...prev.settings,
-        [setting]: !prev.settings[setting]
+  const handleProductSelect = (product: { id: string; name: string }) => {
+    setSelectedProducts(prev => {
+      const exists = prev.some(p => p.id === product.id);
+      if (!exists) {
+        const updated = [...prev, product];
+        setFormData(prev => ({
+          ...prev,
+          products: updated.map(p => p.id),
+        }));
+        return updated;
       }
-    }));
+      return prev;
+    });
   };
 
+  const handleProductRemove = (productId: string) => {
+    setSelectedProducts(prev => {
+      const updated = prev.filter(p => p.id !== productId);
+      setFormData(prev => ({
+        ...prev,
+        products: updated.map(p => p.id),
+      }));
+      return updated;
+    });
+  };
+
+  if (loading) return <LoadingOverlay />;
+
   return (
-    <div className="p-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Schedule New Live Stream</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="p-3 text-sm text-red-500 bg-red-50 rounded-md">
-                {error}
-              </div>
-            )}
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-semibold text-gray-900">Create Live Stream</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          Set up a new live shopping stream
+        </p>
+      </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Title</label>
-              <Input
-                name="title"
+      {/* Form */}
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {formErrors._error && (
+          <ErrorMessage message={formErrors._error} />
+        )}
+
+        <Card className="p-6">
+          <div className="space-y-4">
+            {/* Title */}
+            <div>
+              <label htmlFor="title" className="block text-sm font-medium text-gray-700">
+                Title
+              </label>
+              <input
+                type="text"
+                id="title"
                 value={formData.title}
-                onChange={handleChange}
-                required
+                onChange={(e) => {
+                  setFormData(prev => ({ ...prev, title: e.target.value }));
+                  if (formErrors.title) {
+                    setFormErrors(prev => ({ ...prev, title: undefined }));
+                  }
+                }}
+                className={`mt-1 block w-full rounded-md ${
+                  formErrors.title ? 'border-red-300' : 'border-gray-300'
+                } shadow-sm focus:border-gray-500 focus:ring-gray-500 sm:text-sm`}
               />
+              {formErrors.title && (
+                <p className="mt-2 text-sm text-red-600">{formErrors.title}</p>
+              )}
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Description</label>
+            {/* Description */}
+            <div>
+              <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                Description
+              </label>
               <textarea
-                name="description"
+                id="description"
+                rows={3}
                 value={formData.description}
-                onChange={handleChange}
-                className="w-full min-h-[100px] px-3 py-2 rounded-md border"
-                required
+                onChange={(e) => {
+                  setFormData(prev => ({ ...prev, description: e.target.value }));
+                  if (formErrors.description) {
+                    setFormErrors(prev => ({ ...prev, description: undefined }));
+                  }
+                }}
+                className={`mt-1 block w-full rounded-md ${
+                  formErrors.description ? 'border-red-300' : 'border-gray-300'
+                } shadow-sm focus:border-gray-500 focus:ring-gray-500 sm:text-sm`}
               />
+              {formErrors.description && (
+                <p className="mt-2 text-sm text-red-600">{formErrors.description}</p>
+              )}
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Schedule Date & Time</label>
-              <Input
-                name="scheduled_at"
+            {/* Schedule */}
+            <div>
+              <label htmlFor="scheduled_at" className="block text-sm font-medium text-gray-700">
+                Schedule Date & Time
+              </label>
+              <input
                 type="datetime-local"
+                id="scheduled_at"
                 value={formData.scheduled_at}
-                onChange={handleChange}
-                min={format(new Date(), "yyyy-MM-dd'T'HH:mm")}
-                required
+                onChange={(e) => {
+                  setFormData(prev => ({ ...prev, scheduled_at: e.target.value }));
+                  if (formErrors.scheduled_at) {
+                    setFormErrors(prev => ({ ...prev, scheduled_at: undefined }));
+                  }
+                }}
+                className={`mt-1 block w-full rounded-md ${
+                  formErrors.scheduled_at ? 'border-red-300' : 'border-gray-300'
+                } shadow-sm focus:border-gray-500 focus:ring-gray-500 sm:text-sm`}
               />
+              {formErrors.scheduled_at && (
+                <p className="mt-2 text-sm text-red-600">{formErrors.scheduled_at}</p>
+              )}
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Thumbnail</label>
-              <Input
-                name="thumbnail"
-                type="file"
-                onChange={handleFileChange}
-                accept="image/*"
-                required
-              />
+            {/* Thumbnail */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Thumbnail
+              </label>
+              <div className="mt-1 flex items-center space-x-4">
+                <div className="w-32 h-32 rounded-lg bg-gray-100 flex items-center justify-center">
+                  {formData.thumbnail ? (
+                    <img
+                      src={URL.createObjectURL(formData.thumbnail)}
+                      alt="Stream thumbnail"
+                      className="w-full h-full object-cover rounded-lg"
+                    />
+                  ) : (
+                    <i className="ri-image-line text-4xl text-gray-400"></i>
+                  )}
+                </div>
+                <div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => document.getElementById('thumbnail-upload')?.click()}
+                  >
+                    Change Image
+                  </Button>
+                  <input
+                    id="thumbnail-upload"
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleThumbnailChange}
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    PNG, JPG, GIF up to 2MB
+                  </p>
+                </div>
+              </div>
+              {formErrors.thumbnail && (
+                <p className="mt-2 text-sm text-red-600">{formErrors.thumbnail}</p>
+              )}
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Settings</label>
-              <div className="space-y-2">
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.settings.chat_enabled}
-                    onChange={() => handleSettingChange('chat_enabled')}
-                    className="rounded border-gray-300"
-                  />
-                  <span>Enable Chat</span>
-                </label>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.settings.reactions_enabled}
-                    onChange={() => handleSettingChange('reactions_enabled')}
-                    className="rounded border-gray-300"
-                  />
-                  <span>Enable Reactions</span>
-                </label>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.settings.product_showcase_enabled}
-                    onChange={() => handleSettingChange('product_showcase_enabled')}
-                    className="rounded border-gray-300"
-                  />
-                  <span>Enable Product Showcase</span>
-                </label>
+            {/* Products */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Products
+              </label>
+              <div className="mt-1">
+                {selectedProducts.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedProducts.map(product => (
+                      <div
+                        key={product.id}
+                        className="flex items-center justify-between p-2 bg-gray-50 rounded-md"
+                      >
+                        <span className="text-sm text-gray-900">{product.name}</span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleProductRemove(product.id)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <i className="ri-delete-bin-line"></i>
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">No products selected</p>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-2"
+                  onClick={() => setShowProductSelector(true)}
+                >
+                  <i className="ri-add-line mr-1"></i>
+                  Add Products
+                </Button>
+                {formErrors.products && (
+                  <p className="mt-2 text-sm text-red-600">{formErrors.products}</p>
+                )}
               </div>
             </div>
+          </div>
+        </Card>
 
-            <div className="flex gap-4">
-              <Button
-                type="submit"
-                disabled={loading}
-              >
-                {loading ? 'Creating...' : 'Create Live Stream'}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => router.back()}
-              >
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+        {/* Actions */}
+        <div className="flex justify-end space-x-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.back()}
+          >
+            Cancel
+          </Button>
+          <Button type="submit">
+            Create Live Stream
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }

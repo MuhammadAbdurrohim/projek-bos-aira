@@ -82,6 +82,14 @@ class MainActivity : AppCompatActivity() {
                         navController.navigate(R.id.cartFragment)
                         true
                     }
+                    R.id.nav_account -> {
+                        navController.navigate(R.id.nav_account)
+                        true
+                    }
+                    R.id.nav_order_history -> {
+                        navController.navigate(R.id.nav_order_history)
+                        true
+                    }
                     R.id.nav_profile -> {
                         navController.navigate(R.id.profileFragment)
                         true

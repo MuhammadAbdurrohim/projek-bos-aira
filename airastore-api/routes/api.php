@@ -7,6 +7,9 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\LiveStreamController;
+use App\Http\Controllers\Api\PaymentConfirmationController;
+use App\Http\Controllers\Api\PaymentAccountController;
+use App\Http\Controllers\Api\ZegoTokenController;
 
 /*
 |--------------------------------------------------------------------------
@@ -55,6 +58,18 @@ Route::middleware('auth:sanctum')->group(function () {
         // Orders Management
         Route::put('orders/{id}/status', [OrderController::class, 'updateStatus']);
         Route::put('orders/{id}/payment-status', [OrderController::class, 'updatePaymentStatus']);
+
+        // Payment Confirmations
+        Route::get('payment-confirmations/pending', [PaymentConfirmationController::class, 'index']);
+        Route::put('payment-confirmations/{orderId}', [PaymentConfirmationController::class, 'update']);
+        Route::get('payment-confirmations/history', [PaymentConfirmationController::class, 'history']);
+        Route::get('payment-confirmations/export', [PaymentConfirmationController::class, 'export']);
+
+        // Payment Accounts Management
+        Route::get('payment-accounts', [PaymentAccountController::class, 'index']);
+        Route::post('payment-accounts', [PaymentAccountController::class, 'store']);
+        Route::put('payment-accounts/{id}', [PaymentAccountController::class, 'update']);
+        Route::delete('payment-accounts/{id}', [PaymentAccountController::class, 'destroy']);
     });
 
     // Cart
@@ -81,6 +96,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('live-streams/{id}/end', [LiveStreamController::class, 'end']);
     Route::put('live-streams/{id}/viewer-count', [LiveStreamController::class, 'updateViewerCount']);
     Route::get('live-streams/{id}/stats', [LiveStreamController::class, 'getStats']);
+    
+    // ZEGO Cloud Token Generation
+    Route::post('zego/token', [ZegoTokenController::class, 'generateToken']);
 });
 
 // Fallback route

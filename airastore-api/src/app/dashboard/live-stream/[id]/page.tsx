@@ -1,205 +1,318 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useParams, useRouter } from 'next/navigation';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { StreamPlayer } from '@/components/live-stream/stream-player';
+import { LoadingOverlay } from '@/components/ui/loading';
+import ErrorMessage from '@/components/ui/error';
+import { useToast, ToastHook } from '@/lib/hooks';
+import StreamPlayer from '@/components/live-stream/stream-player';
+import ProductShowcase from '@/components/live-stream/product-showcase';
 
 interface LiveStream {
-  id: number;
+  id: string;
   title: string;
   description: string;
   status: 'scheduled' | 'live' | 'ended';
-  room_id: string;
-  stream_key: string;
+  started_at: string;
   viewer_count: number;
-  scheduled_at: string;
-  started_at: string | null;
-  ended_at: string | null;
-  user: {
-    id: number;
+  chat_enabled: boolean;
+  products_enabled: boolean;
+  host: {
     name: string;
+    avatar: string;
   };
 }
 
-export default function LiveStreamDetailPage() {
+export default function ViewLiveStreamPage() {
   const params = useParams();
-  const [liveStream, setLiveStream] = useState<LiveStream | null>(null);
+  const router = useRouter();
+  const toast: ToastHook = useToast();
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [stream, setStream] = useState<LiveStream | null>(null);
+  const [isEnding, setIsEnding] = useState(false);
+  const [showConfirmEnd, setShowConfirmEnd] = useState(false);
 
   useEffect(() => {
-    fetchLiveStream();
-  }, []);
+    fetchStreamDetails();
+    // Poll for stream updates every 10 seconds
+    const interval = setInterval(fetchStreamDetails, 10000);
+    return () => clearInterval(interval);
+  }, [params.id]);
 
-  const fetchLiveStream = async () => {
+  const fetchStreamDetails = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/live-streams/${params.id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
+      const response = await fetch(`/api/live-streams/${params.id}`);
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error('Failed to fetch live stream details');
+        throw new Error(data.message || 'Failed to fetch stream details');
       }
 
-      const data = await response.json();
-      setLiveStream(data.data);
-    } catch (err: any) {
-      setError(err.message);
+      if (data.status === 'scheduled') {
+        router.push(`/dashboard/live-stream/start/${params.id}`);
+        return;
+      }
+
+      if (data.status === 'ended') {
+        router.push('/dashboard/live-stream');
+        return;
+      }
+
+      setStream(data);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      setError(errorMessage);
+      toast.addToast(errorMessage, 'error');
     } finally {
       setLoading(false);
     }
   };
 
   const handleEndStream = async () => {
-    if (!confirm('Are you sure you want to end this live stream?')) {
-      return;
-    }
+    if (!stream) return;
 
+    setIsEnding(true);
     try {
-      const response = await fetch(`http://localhost:8000/api/live-streams/${params.id}/end`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
+      const response = await fetch(`/api/live-streams/${stream.id}/end`, {
+        method: 'POST',
       });
 
       if (!response.ok) {
         throw new Error('Failed to end live stream');
       }
 
-      // Refresh live stream data
-      fetchLiveStream();
-    } catch (err: any) {
-      setError(err.message);
+      toast.addToast('Live stream ended successfully', 'success');
+      router.push('/dashboard/live-stream');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      toast.addToast(errorMessage, 'error');
+      setIsEnding(false);
     }
   };
 
-  if (loading) {
-    return <div className="p-4">Loading...</div>;
-  }
+  const toggleFeature = async (feature: 'chat' | 'products') => {
+    if (!stream) return;
 
-  if (error) {
-    return <div className="p-4 text-red-500">{error}</div>;
-  }
+    try {
+      const response = await fetch(`/api/live-streams/${stream.id}/settings`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          [feature === 'chat' ? 'chat_enabled' : 'products_enabled']: 
+            feature === 'chat' ? !stream.chat_enabled : !stream.products_enabled,
+        }),
+      });
 
-  if (!liveStream) {
-    return <div className="p-4">Live stream not found</div>;
-  }
+      if (!response.ok) {
+        throw new Error(`Failed to toggle ${feature}`);
+      }
+
+      setStream(prev => prev ? {
+        ...prev,
+        [feature === 'chat' ? 'chat_enabled' : 'products_enabled']: 
+          feature === 'chat' ? !prev.chat_enabled : !prev.products_enabled,
+      } : null);
+
+      toast.addToast(`${feature.charAt(0).toUpperCase() + feature.slice(1)} ${
+        feature === 'chat' 
+          ? stream.chat_enabled ? 'disabled' : 'enabled'
+          : stream.products_enabled ? 'disabled' : 'enabled'
+      }`, 'success');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      toast.addToast(errorMessage, 'error');
+    }
+  };
+
+  if (loading) return <LoadingOverlay />;
+  if (error) return <ErrorMessage message={error} />;
+  if (!stream) return null;
 
   return (
-    <div className="p-4 space-y-4">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>{liveStream.title}</CardTitle>
-            <p className="mt-1 text-sm text-gray-500">{liveStream.description}</p>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">Live Stream</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Manage your live stream and interact with viewers
+          </p>
+        </div>
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center text-sm text-gray-500">
+            <i className="ri-eye-line mr-1"></i>
+            {stream.viewer_count} viewers
           </div>
-          {liveStream.status === 'live' && (
-            <Button
-              variant="destructive"
-              onClick={handleEndStream}
-            >
-              End Stream
-            </Button>
-          )}
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2">
-              {liveStream.status === 'live' && (
-                <StreamPlayer
-                  roomId={liveStream.room_id}
-                  userId={`user-${Date.now()}`}
-                  userName="Viewer"
-                  role="Audience"
-                  token=""
-                />
-              )}
-              {liveStream.status === 'scheduled' && (
-                <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
-                  <div className="text-center">
-                    <h3 className="text-lg font-medium">Stream Starting Soon</h3>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Scheduled for {new Date(liveStream.scheduled_at).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              )}
-              {liveStream.status === 'ended' && (
-                <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
-                  <div className="text-center">
-                    <h3 className="text-lg font-medium">Stream Ended</h3>
-                    <p className="mt-1 text-sm text-gray-500">
-                      This live stream has ended
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="h-[600px]">
-              {liveStream.status === 'live' && (
-                <div className="h-full">
-                  <div id="zego-chat" className="h-full" />
-                </div>
-              )}
-            </div>
+          <div className="flex items-center text-sm text-gray-500">
+            <i className="ri-time-line mr-1"></i>
+            Live for {formatDuration(new Date(stream.started_at))}
           </div>
-        </CardContent>
-      </Card>
+          <Button
+            variant="outline"
+            className="text-red-600 hover:text-red-700 border-red-200 hover:border-red-300"
+            onClick={() => setShowConfirmEnd(true)}
+            disabled={isEnding}
+          >
+            {isEnding ? (
+              <>
+                <i className="ri-loader-4-line animate-spin mr-2"></i>
+                Ending Stream...
+              </>
+            ) : (
+              <>
+                <i className="ri-live-line mr-2"></i>
+                End Stream
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Stream Information</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Status</dt>
-              <dd className="mt-1">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  liveStream.status === 'live'
-                    ? 'bg-red-100 text-red-800'
-                    : liveStream.status === 'scheduled'
-                    ? 'bg-blue-100 text-blue-800'
-                    : 'bg-gray-100 text-gray-800'
-                }`}>
-                  {liveStream.status.charAt(0).toUpperCase() + liveStream.status.slice(1)}
-                </span>
-              </dd>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Content */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Stream Player */}
+          <Card className="overflow-hidden">
+            <div className="aspect-video bg-black">
+              <StreamPlayer
+                streamId={stream.id}
+                isHost={true}
+                onError={(error) => toast.addToast(error, 'error')}
+              />
             </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Streamer</dt>
-              <dd className="mt-1">{liveStream.user.name}</dd>
+          </Card>
+
+          {/* Stream Info */}
+          <Card className="p-6">
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">
+                  {stream.title}
+                </h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  {stream.description}
+                </p>
+              </div>
+
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center">
+                  {stream.host.avatar ? (
+                    <img
+                      src={stream.host.avatar}
+                      alt={stream.host.name}
+                      className="h-8 w-8 rounded-full"
+                    />
+                  ) : (
+                    <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
+                      <i className="ri-user-line text-gray-400"></i>
+                    </div>
+                  )}
+                  <span className="ml-2 text-sm font-medium text-gray-900">
+                    {stream.host.name}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Scheduled At</dt>
-              <dd className="mt-1">{new Date(liveStream.scheduled_at).toLocaleString()}</dd>
+          </Card>
+        </div>
+
+        {/* Sidebar */}
+        <div className="lg:col-span-1 space-y-6">
+          {/* Controls */}
+          <Card className="p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              Stream Controls
+            </h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Chat</p>
+                  <p className="text-sm text-gray-500">
+                    Enable viewer chat
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => toggleFeature('chat')}
+                >
+                  {stream.chat_enabled ? 'Disable' : 'Enable'}
+                </Button>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Products</p>
+                  <p className="text-sm text-gray-500">
+                    Show product showcase
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => toggleFeature('products')}
+                >
+                  {stream.products_enabled ? 'Hide' : 'Show'}
+                </Button>
+              </div>
             </div>
-            {liveStream.started_at && (
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Started At</dt>
-                <dd className="mt-1">{new Date(liveStream.started_at).toLocaleString()}</dd>
-              </div>
-            )}
-            {liveStream.ended_at && (
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Ended At</dt>
-                <dd className="mt-1">{new Date(liveStream.ended_at).toLocaleString()}</dd>
-              </div>
-            )}
-            {liveStream.status === 'live' && (
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Viewers</dt>
-                <dd className="mt-1">{liveStream.viewer_count}</dd>
-              </div>
-            )}
-          </dl>
-        </CardContent>
-      </Card>
+          </Card>
+
+          {/* Products */}
+          {stream.products_enabled && (
+            <ProductShowcase
+              streamId={stream.id}
+              isHost={true}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* End Stream Confirmation */}
+      {showConfirmEnd && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              End Live Stream?
+            </h3>
+            <p className="text-sm text-gray-500 mb-6">
+              Are you sure you want to end this live stream? This action cannot be undone.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowConfirmEnd(false)}
+                disabled={isEnding}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleEndStream}
+                disabled={isEnding}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {isEnding ? 'Ending...' : 'End Stream'}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
+}
+
+function formatDuration(startDate: Date): string {
+  const diff = Date.now() - startDate.getTime();
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
 }

@@ -45,6 +45,16 @@
         android:name="com.airastore.app.fragments.ProfileFragment"
         android:label="@string/profile" />
 
+    <fragment
+        android:id="@+id/nav_account"
+        android:name="com.airastore.app.fragments.AccountFragment"
+        android:label="@string/account" />
+
+    <fragment
+        android:id="@+id/nav_order_history"
+        android:name="com.airastore.app.fragments.OrderHistoryFragment"
+        android:label="@string/order_history" />
+
     <!-- Additional destinations -->
     <fragment
         android:id="@+id/productDetailFragment"

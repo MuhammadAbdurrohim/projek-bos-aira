@@ -1,156 +1,201 @@
-'use client';
-
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useEffect } from 'react';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { LoadingOverlay } from '@/components/ui/loading';
+import ErrorMessage from '@/components/ui/error';
+import { useToast, ToastHook } from '@/lib/hooks';
+import { formatCurrency } from '@/lib/utils';
 
 interface Product {
-  id: number;
+  id: string;
   name: string;
   description: string;
   price: number;
-  discount_price?: number;
-  image_url: string;
   stock: number;
-  order: number;
-  is_highlighted: boolean;
+  image: string;
+  featured?: boolean;
 }
 
 interface ProductShowcaseProps {
-  products: Product[];
+  streamId: string;
   isHost?: boolean;
-  onHighlight?: (productId: number) => void;
-  onReorder?: (productId: number, newOrder: number) => void;
+  onProductSelect?: (productId: string) => void;
 }
 
-export function ProductShowcase({ 
-  products, 
-  isHost = false,
-  onHighlight,
-  onReorder 
-}: ProductShowcaseProps) {
-  const [reordering, setReordering] = useState(false);
+export default function ProductShowcase({ streamId, isHost = false, onProductSelect }: ProductShowcaseProps) {
+  const toast: ToastHook = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [featuredProduct, setFeaturedProduct] = useState<Product | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
-  const handleHighlight = async (productId: number) => {
-    if (onHighlight) {
-      onHighlight(productId);
+  useEffect(() => {
+    fetchProducts();
+  }, [streamId]);
+
+  const fetchProducts = async () => {
+    try {
+      const response = await fetch(`/api/live-streams/${streamId}/products`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch products');
+      }
+
+      setProducts(data);
+      const featured = data.find((p: Product) => p.featured);
+      if (featured) {
+        setFeaturedProduct(featured);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      setError(errorMessage);
+      toast.addToast(errorMessage, 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const moveProduct = (productId: number, direction: 'up' | 'down') => {
-    if (!onReorder) return;
+  const handleFeatureProduct = async (productId: string) => {
+    try {
+      const response = await fetch(`/api/live-streams/${streamId}/products/${productId}/feature`, {
+        method: 'POST',
+      });
 
-    const currentIndex = products.findIndex(p => p.id === productId);
-    if (currentIndex === -1) return;
+      if (!response.ok) {
+        throw new Error('Failed to feature product');
+      }
 
-    const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-    if (newIndex < 0 || newIndex >= products.length) return;
+      const updatedProducts = products.map(p => ({
+        ...p,
+        featured: p.id === productId,
+      }));
 
-    onReorder(productId, products[newIndex].order);
+      setProducts(updatedProducts);
+      setFeaturedProduct(products.find(p => p.id === productId) || null);
+      toast.addToast('Product featured successfully', 'success');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      toast.addToast(errorMessage, 'error');
+    }
   };
 
+  if (loading) return <LoadingOverlay />;
+  if (error) return <ErrorMessage message={error} />;
+
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Featured Products</CardTitle>
-        {isHost && (
+    <div className="space-y-6">
+      {/* Featured Product */}
+      {featuredProduct && (
+        <Card className="overflow-hidden">
+          <div className="relative">
+            <img
+              src={featuredProduct.image}
+              alt={featuredProduct.name}
+              className="w-full h-48 object-cover"
+            />
+            <div className="absolute top-2 left-2">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                <i className="ri-star-fill mr-1"></i>
+                Featured
+              </span>
+            </div>
+          </div>
+          <div className="p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium text-gray-900">
+                {featuredProduct.name}
+              </h3>
+              <p className="text-lg font-semibold text-gray-900">
+                {formatCurrency(featuredProduct.price)}
+              </p>
+            </div>
+            <p className="mt-1 text-sm text-gray-500">
+              {featuredProduct.description}
+            </p>
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-sm text-gray-500">
+                {featuredProduct.stock} in stock
+              </p>
+              <Button
+                onClick={() => onProductSelect?.(featuredProduct.id)}
+                disabled={featuredProduct.stock === 0}
+              >
+                {featuredProduct.stock === 0 ? 'Out of Stock' : 'Buy Now'}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Product Grid */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-medium text-gray-900">
+            {showAll ? 'All Products' : 'Available Products'}
+          </h3>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setReordering(!reordering)}
+            onClick={() => setShowAll(!showAll)}
           >
-            {reordering ? 'Done' : 'Reorder'}
+            {showAll ? 'Show Less' : 'Show All'}
           </Button>
-        )}
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {products.map((product) => (
-            <div
-              key={product.id}
-              className={`p-4 rounded-lg border transition-all ${
-                product.is_highlighted ? 'border-black bg-gray-50' : 'border-gray-200'
-              }`}
-            >
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  <img
-                    src={product.image_url}
-                    alt={product.name}
-                    className="w-20 h-20 object-cover rounded"
-                  />
-                  {product.discount_price && (
-                    <div className="absolute top-0 right-0 bg-red-500 text-white text-xs px-2 py-1 rounded-bl">
-                      Sale
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-medium truncate">{product.name}</h4>
-                  <div className="mt-1 flex items-baseline gap-2">
-                    {product.discount_price ? (
-                      <>
-                        <span className="text-red-500 font-medium">
-                          Rp {product.discount_price.toLocaleString()}
-                        </span>
-                        <span className="text-sm text-gray-500 line-through">
-                          Rp {product.price.toLocaleString()}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="font-medium">
-                        Rp {product.price.toLocaleString()}
-                      </span>
-                    )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          {(showAll ? products : products.slice(0, 4)).map((product) => (
+            <Card key={product.id} className="overflow-hidden">
+              <div className="relative">
+                <img
+                  src={product.image}
+                  alt={product.name}
+                  className="w-full h-32 object-cover"
+                />
+                {product.stock === 0 && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                    <span className="text-white text-sm font-medium">
+                      Out of Stock
+                    </span>
                   </div>
-                  <p className="mt-1 text-sm text-gray-500 truncate">
-                    {product.description}
-                  </p>
-                  {product.stock < 10 && (
-                    <p className="mt-1 text-sm text-red-500">
-                      Only {product.stock} left!
-                    </p>
+                )}
+              </div>
+              <div className="p-3">
+                <h4 className="font-medium text-gray-900 truncate">
+                  {product.name}
+                </h4>
+                <p className="text-sm text-gray-500 mt-1">
+                  {formatCurrency(product.price)}
+                </p>
+                <div className="mt-3 flex items-center justify-between">
+                  {isHost ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleFeatureProduct(product.id)}
+                      disabled={product.featured}
+                    >
+                      {product.featured ? 'Featured' : 'Feature'}
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      onClick={() => onProductSelect?.(product.id)}
+                      disabled={product.stock === 0}
+                    >
+                      Buy Now
+                    </Button>
                   )}
-                </div>
-                <div className="flex flex-col gap-2">
-                  {isHost && (
-                    <>
-                      {reordering ? (
-                        <div className="flex flex-col gap-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => moveProduct(product.id, 'up')}
-                            disabled={products[0].id === product.id}
-                          >
-                            ↑
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => moveProduct(product.id, 'down')}
-                            disabled={products[products.length - 1].id === product.id}
-                          >
-                            ↓
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button
-                          variant={product.is_highlighted ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => handleHighlight(product.id)}
-                        >
-                          {product.is_highlighted ? 'Featured' : 'Feature'}
-                        </Button>
-                      )}
-                    </>
-                  )}
+                  <span className="text-xs text-gray-500">
+                    {product.stock} left
+                  </span>
                 </div>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

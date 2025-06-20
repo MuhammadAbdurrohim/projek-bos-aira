@@ -49,9 +49,9 @@ class CategoryFragment : Fragment() {
         // Setup RecyclerView
         productAdapter = ProductAdapter(
             onItemClick = { product ->
-                findNavController().navigate(
-                    CategoryFragmentDirections.actionCategoryToProductDetail(product.id)
-                )
+                // Show category product modal dialog
+                val modal = ModalProductFragment.newInstance(product)
+                modal.show(childFragmentManager, ModalProductFragment.TAG)
             }
         )
 

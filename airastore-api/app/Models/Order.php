@@ -23,7 +23,10 @@ class Order extends Model
         'notes',
         'paid_at',
         'cancelled_at',
-        'delivered_at'
+        'delivered_at',
+        'payment_proof',
+        'admin_notes',
+        'verification_status'
     ];
 
     protected $casts = [
